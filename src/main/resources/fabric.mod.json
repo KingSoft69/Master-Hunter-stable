@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "masterhunter",
+  "version": "${version}",
+  "name": "Master-Hunter",
+  "description": "An addon for Meteor Client",
+  "authors": [
+    "cozidev"
+  ],
+  "contact": {
+    "sources": "https://github.com/KingSoft69/MasterHunter"
+  },
+  "icon": "assets/Main/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "dev.masterhunter.addon.Main"
+    ]
+  },
+  "mixins": [
+    "addon.mixins.json",
+    "addon-meteor.mixins.json",
+    "addon-xaero.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "225,25,25"
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": "~1.21.1",
+    "meteor-client": "*"
+  }
+}
