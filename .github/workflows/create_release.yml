@@ -1,0 +1,109 @@
+name: Build and Release JAR
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+
+jobs:
+  build-jar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+      
+      - name: Build JAR with Gradle
+        run: |
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew build
+          elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+            gradle build
+          else
+            echo "No Gradle build files found"
+            exit 1
+          fi
+      
+      - name: Find built JAR
+        id: find-jar
+        run: |
+          JAR_FILE=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
+          if [ -z "$JAR_FILE" ]; then
+            echo "No JAR file found in build/libs"
+            exit 1
+          fi
+          echo "jar_file=$JAR_FILE" >> $GITHUB_OUTPUT
+          echo "jar_name=$(basename $JAR_FILE)" >> $GITHUB_OUTPUT
+      
+      - name: Extract version from gradle.properties
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag }}" ]; then
+            # Use user-provided tag for manual triggers
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            echo "name=Release ${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Use the actual tag name if pushed with a tag
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "name=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            # For main branch builds, use version from gradle.properties + build number
+            MOD_VERSION=$(grep "^mod_version=" gradle.properties | cut -d'=' -f2)
+            TAG="v${MOD_VERSION}-build.${{ github.run_number }}"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "name=Release $TAG" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.name }}
+          body: |
+            ## Master-Hunter Release
+            
+            Built JAR file for Master-Hunter - A 2b2t Meteor Client utility based addon.
+            
+            **Build Information:**
+            - Commit: ${{ github.sha }}
+            - Build Number: ${{ github.run_number }}
+            - Triggered by: ${{ github.event_name }}
+            
+            ### Installation
+            1. Download the JAR file below
+            2. Place it in your `.minecraft/mods` folder
+            3. Make sure you have Fabric Loader and Meteor Client installed
+            
+            ### What's in this build
+            See the [commit history](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) for details.
+          files: |
+            ${{ steps.find-jar.outputs.jar_file }}
+          draft: false
+          prerelease: false
+      
+      - name: Upload JAR as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.find-jar.outputs.jar_name }}
+          path: ${{ steps.find-jar.outputs.jar_file }}
